@@ -24,6 +24,8 @@ function App() {
   const [remainingTime, setRemainingTime] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [windowSwitchCount, setWindowSwitchCount] = useState(0);
   
   // Define options state with default values
   const [options, setOptions] = useState<GenerationOptions>({
@@ -239,6 +241,73 @@ function App() {
     setIsDark(!isDark);
   };
 
+  useEffect(() => {
+    let resizeTimeout: string | number | NodeJS.Timeout | undefined;
+    let resizeAlarmTriggered = false;
+  
+    const handleVisibilityChange = () => {
+      if (document.hidden && isLocked) {
+        setTabSwitchCount((count) => count + 1);
+        ringAlarm('Tab switch detected!');
+      }
+    };
+  
+    const handleBlur = () => {
+      if (isLocked && document.visibilityState === 'visible') {
+        setWindowSwitchCount((count) => count + 1);
+        ringAlarm('Window switch detected!');
+      }
+    };
+  
+    const handleFocus = () => {
+      if (isLocked) {
+        stopAlarm();
+        setSecurityWarning(null);
+        resizeAlarmTriggered = false; // Reset resize alarm on focus
+      }
+    };
+  
+    const handleResize = () => {
+      if (isLocked && !resizeAlarmTriggered) {
+        ringAlarm('Window resize or split-screen detected!');
+        resizeAlarmTriggered = true;
+  
+        // Wait for resizing to finish
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+          resizeAlarmTriggered = false; // Reset after resizing stops
+        }, 2000); // 2-second buffer after resizing stops
+      }
+    };
+  
+    const ringAlarm = (message: React.SetStateAction<string | null>) => {
+      setSecurityWarning(message);
+      if (audioRef.current) {
+        audioRef.current.play();
+      }
+    };
+  
+    const stopAlarm = () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0; // Reset audio to start
+      }
+    };
+  
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('resize', handleResize);
+  
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isLocked]);
+  
+
   const startLock = () => {
     setIsLocked(true);
     setRemainingTime(lockDuration * 60); // Convert minutes to seconds
@@ -394,6 +463,11 @@ function App() {
                     Lock
                   </button>
                 )}
+                <div className="mt-4 p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
+  <p className="text-gray-700 dark:text-gray-300">Tab switches: {tabSwitchCount}</p>
+  <p className="text-gray-700 dark:text-gray-300">Window switches: {windowSwitchCount}</p>
+</div>
+
               </div>
               <button
                 onClick={toggleFullscreen}
@@ -481,6 +555,10 @@ function App() {
                     onChange={(e) => setOptions({ ...options, num_inference_steps: parseInt(e.target.value) })}
                     className="w-full"
                   />
+                  <div className="mt-4">
+  <p className="text-gray-700 dark:text-gray-300">Tab switches: {tabSwitchCount}</p>
+  <p className="text-gray-700 dark:text-gray-300">Window switches: {windowSwitchCount}</p>
+</div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
