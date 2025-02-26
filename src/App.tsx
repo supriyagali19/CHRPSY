@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { ImageIcon, Loader2, Sparkles, XCircle, Settings, Sun, Moon, Wand2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ImageIcon, Loader2, Sparkles, XCircle, Settings, Sun, Moon, Wand2, Maximize2, AlertTriangle, Lock, Timer } from 'lucide-react';
 
+// Define the options interface
 interface GenerationOptions {
-  negative_prompt?: string;
-  num_inference_steps?: number;
-  guidance_scale?: number;
-  width?: number;
-  height?: number;
-  refiner_steps?: number;
+  num_inference_steps: number;
+  guidance_scale: number;
+  width: number;
+  height: number;
+  refiner_steps: number;
 }
 
 function App() {
@@ -17,6 +17,23 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [securityWarning, setSecurityWarning] = useState<string | null>(null);
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockDuration, setLockDuration] = useState(5); // Default 5 minutes
+  const [remainingTime, setRemainingTime] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Define options state with default values
+  const [options, setOptions] = useState<GenerationOptions>({
+    num_inference_steps: 30,
+    guidance_scale: 7.5,
+    width: 768,
+    height: 768,
+    refiner_steps: 20
+  });
+
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('theme') === 'dark' ||
@@ -25,13 +42,46 @@ function App() {
     return false;
   });
 
-  const [options, setOptions] = useState<GenerationOptions>({
-    num_inference_steps: 50,
-    guidance_scale: 7.5,
-    width: 1024,
-    height: 1024,
-    refiner_steps: 20,
-  });
+  useEffect(() => {
+    // Create audio element with a reliable source that loops
+    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    audio.preload = 'auto';
+    audio.volume = 1.0; // Set volume to 100%
+    audio.loop = true; // Enable looping
+    audioRef.current = audio;
+
+    // Test audio loading
+    const handleCanPlayThrough = () => {
+      console.log('Audio loaded successfully');
+    };
+
+    const handleError = (e: Event) => {
+      console.error('Error loading audio:', e);
+      setError('Failed to load alarm sound. Please check your internet connection.');
+    };
+
+    audio.addEventListener('canplaythrough', handleCanPlayThrough);
+    audio.addEventListener('error', handleError);
+    
+    // Optional: Preload the audio
+    const loadAudio = async () => {
+      try {
+        await audio.load();
+      } catch (err) {
+        console.error('Error preloading audio:', err);
+      }
+    };
+    loadAudio();
+    
+    return () => {
+      audio.removeEventListener('canplaythrough', handleCanPlayThrough);
+      audio.removeEventListener('error', handleError);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (isDark) {
@@ -43,8 +93,170 @@ function App() {
     }
   }, [isDark]);
 
+  useEffect(() => {
+    if (isLocked && remainingTime > 0) {
+      timerRef.current = setInterval(() => {
+        setRemainingTime(prev => {
+          if (prev <= 1) {
+            setIsLocked(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [isLocked, remainingTime]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && isLocked) {
+        setSecurityWarning('Tab switching detected! Please return to this tab immediately!');
+        if (audioRef.current) {
+          // Force unmute and set volume to maximum
+          audioRef.current.muted = false;
+          audioRef.current.volume = 1.0;
+          
+          // Play audio with proper error handling
+          const playSound = async () => {
+            try {
+              // Create a new AudioContext to ensure audio plays
+              const audioContext = new AudioContext();
+              await audioContext.resume();
+              
+              // Attempt to play with retry mechanism
+              const attemptPlay = async (retries = 3) => {
+                try {
+                  await audioRef.current?.play();
+                } catch (err) {
+                  if (retries > 0) {
+                    console.log(`Retrying playback, ${retries} attempts remaining`);
+                    setTimeout(() => attemptPlay(retries - 1), 1000);
+                  } else {
+                    console.error('Failed to play audio after all retries:', err);
+                  }
+                }
+              };
+              
+              await attemptPlay();
+            } catch (err) {
+              console.error('Error playing audio:', err);
+              // Try playing again after user interaction
+              const handleUserInteraction = async () => {
+                try {
+                  await audioRef.current?.play();
+                  document.removeEventListener('click', handleUserInteraction);
+                } catch (err) {
+                  console.error('Error playing audio after user interaction:', err);
+                }
+              };
+              document.addEventListener('click', handleUserInteraction);
+            }
+          };
+          playSound();
+        }
+      } else if (!document.hidden) {
+        // Only stop the alarm when returning to the tab
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        }
+        setSecurityWarning(null);
+      }
+    };
+
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      if (!document.fullscreenElement && isLocked) {
+        setSecurityWarning('Full-screen mode is required!');
+      } else {
+        setSecurityWarning(null);
+      }
+    };
+
+    const preventDefaultKeys = (e: KeyboardEvent) => {
+      if (isLocked) {
+        if (
+          e.key === 'F11' ||
+          (e.ctrlKey && (e.key === 'r' || e.key === 'R')) ||
+          (e.altKey && e.key === 'Tab') ||
+          (e.ctrlKey && e.key === 'Tab') ||
+          (e.altKey && e.key === 'F4')
+        ) {
+          e.preventDefault();
+        }
+      }
+    };
+
+    const preventCopyPaste = (e: Event) => {
+      if (isLocked) {
+        e.preventDefault();
+      }
+    };
+
+    const preventContextMenu = (e: Event) => {
+      if (isLocked) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('keydown', preventDefaultKeys);
+    document.addEventListener('copy', preventCopyPaste);
+    document.addEventListener('paste', preventCopyPaste);
+    document.addEventListener('contextmenu', preventContextMenu);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('keydown', preventDefaultKeys);
+      document.removeEventListener('copy', preventCopyPaste);
+      document.removeEventListener('paste', preventCopyPaste);
+      document.removeEventListener('contextmenu', preventContextMenu);
+    };
+  }, [isLocked]);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (err) {
+      setError('Fullscreen mode is not supported by your browser');
+    }
+  };
+
   const toggleTheme = () => {
     setIsDark(!isDark);
+  };
+
+  const startLock = () => {
+    setIsLocked(true);
+    setRemainingTime(lockDuration * 60); // Convert minutes to seconds
+    setSecurityWarning('Tab switching is now locked. An alarm will sound if you try to switch tabs.');
+    setTimeout(() => setSecurityWarning(null), 3000);
+  };
+
+  const stopLock = () => {
+    setIsLocked(false);
+    setRemainingTime(0);
+    setSecurityWarning('Tab switching lock has been disabled.');
+    setTimeout(() => setSecurityWarning(null), 3000);
+  };
+
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
   const generateImage = async () => {
@@ -151,20 +363,72 @@ function App() {
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
               <Sparkles className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">CHRPSY</h1>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">AI Image Generator</h1>
             </div>
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
-              aria-label="Toggle theme"
-            >
-              {isDark ? (
-                <Sun className="w-5 h-5 text-yellow-500" />
-              ) : (
-                <Moon className="w-5 h-5 text-gray-600" />
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mr-4">
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={lockDuration}
+                  onChange={(e) => setLockDuration(Math.min(60, Math.max(1, parseInt(e.target.value) || 1)))}
+                  className="w-16 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  disabled={isLocked}
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">min</span>
+                {isLocked ? (
+                  <button
+                    onClick={stopLock}
+                    className="px-3 py-1 bg-red-600 text-white rounded-lg flex items-center gap-1 text-sm"
+                  >
+                    <Timer className="w-4 h-4" />
+                    {formatTime(remainingTime)}
+                  </button>
+                ) : (
+                  <button
+                    onClick={startLock}
+                    className="px-3 py-1 bg-green-600 text-white rounded-lg flex items-center gap-1 text-sm"
+                  >
+                    <Lock className="w-4 h-4" />
+                    Lock
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={toggleFullscreen}
+                className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
+                aria-label="Toggle fullscreen"
+              >
+                <Maximize2 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              </button>
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
+                aria-label="Toggle theme"
+              >
+                {isDark ? (
+                  <Sun className="w-5 h-5 text-yellow-500" />
+                ) : (
+                  <Moon className="w-5 h-5 text-gray-600" />
+                )}
+              </button>
+            </div>
           </div>
+
+          {securityWarning && (
+            <div className="mb-6 bg-yellow-50 dark:bg-yellow-900/50 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 flex items-center gap-3 text-yellow-700 dark:text-yellow-400 transition-colors duration-200">
+              <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+              <p>{securityWarning}</p>
+            </div>
+          )}
+
+          {!isFullscreen && (
+            <div className="mb-6 bg-blue-50 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex items-center gap-3 text-blue-700 dark:text-blue-400 transition-colors duration-200">
+              <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+              <p>Please enter full-screen mode for the best experience.</p>
+            </div>
+          )}
 
           <div className="space-y-6">
             <div>
@@ -309,6 +573,8 @@ function App() {
                   src={image}
                   alt={prompt}
                   className="w-full h-auto"
+                  style={{ userSelect: 'none' }}
+                  onContextMenu={(e) => e.preventDefault()}
                 />
               </div>
             )}
