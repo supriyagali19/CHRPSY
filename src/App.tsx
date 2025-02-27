@@ -347,7 +347,7 @@ const downloadImage = (imageUrl: string) => {
 
     try {
       // First pass with base model
-      const baseResponse = await fetch('https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0', {
+      const baseResponse = await fetch('https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-3.5-large', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${import.meta.env.VITE_HUGGINGFACE_API_KEY}`,
