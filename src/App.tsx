@@ -12,7 +12,7 @@ interface GenerationOptions {
 
 function App() {
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('blurry, bad quality, distorted, deformed, ugly, bad anatomy');
+  const [negativePrompt, setNegativePrompt] = useState(' ');
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,11 +29,11 @@ function App() {
   
   // Define options state with default values
   const [options, setOptions] = useState<GenerationOptions>({
-    num_inference_steps: 30,
-    guidance_scale: 7.5,
+    num_inference_steps: 0,
+    guidance_scale: 0,
     width: 768,
     height: 768,
-    refiner_steps: 20
+    refiner_steps: 0
   });
 
   const [isDark, setIsDark] = useState(() => {
