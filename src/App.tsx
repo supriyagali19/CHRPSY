@@ -20,7 +20,7 @@ function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [securityWarning, setSecurityWarning] = useState<string | null>(null);
   const [isLocked, setIsLocked] = useState(false);
-  const [lockDuration, setLockDuration] = useState(5); // Default 5 minutes
+  const [lockDuration, setLockDuration] = useState(60); // Default 5 minutes
   const [remainingTime, setRemainingTime] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -29,11 +29,11 @@ function App() {
   
   // Define options state with default values
   const [options, setOptions] = useState<GenerationOptions>({
-    num_inference_steps: 0,
-    guidance_scale: 0,
+    num_inference_steps: 1,
+    guidance_scale: 1,
     width: 768,
     height: 768,
-    refiner_steps: 0
+    refiner_steps: 1
   });
 
   const [isDark, setIsDark] = useState(() => {
