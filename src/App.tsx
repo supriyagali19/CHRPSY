@@ -327,7 +327,14 @@ function App() {
     const remainingSeconds = seconds % 60;
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
-
+const downloadImage = (imageUrl: string) => {
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = 'generated_image.png';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
   const generateImage = async () => {
     if (!prompt.trim()) {
       setError('Please enter a prompt');
@@ -636,6 +643,14 @@ function App() {
                   </>
                 )}
               </button>
+               {image && (
+                <button
+                  onClick={() => downloadImage(image)}
+                  className="px-6 py-4 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 dark:focus:ring-gray-400 flex items-center gap-2 transition-colors duration-200"
+                >
+                  Download
+                </button>
+              )}
             </div>
 
             {error && (
