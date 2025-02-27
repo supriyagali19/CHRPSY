@@ -443,15 +443,15 @@ const downloadImage = (imageUrl: string) => {
             </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2 mr-4">
-                <input
-                  type="number"
-                  min="1"
-                  max="60"
-                  value={lockDuration}
-                  onChange={(e) => setLockDuration(Math.min(60, Math.max(1, parseInt(e.target.value) || 1)))}
-                  className="w-16 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  disabled={isLocked}
-                />
+                 <input
+  type="number"
+  min="60"
+  max="60"
+  value="60"
+  className="w-16 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+  disabled={true}
+  readOnly
+/>
                 <span className="text-sm text-gray-600 dark:text-gray-400">min</span>
                 {isLocked ? (
                   <button
